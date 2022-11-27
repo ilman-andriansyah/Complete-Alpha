@@ -1,0 +1,220 @@
+Syntax Konfigurasi HTTPS dan FTPS Debian 7.8
+
+**********************************************************************
+**********************************************************************
+Syntax Konfigurasi HTTPS
+**********************************************************************
+**********************************************************************
+
+----------------------------------------------------------------------------------------------------------------------------
+apt-get install apache2 openssl ssl-cert
+----------------------------------------------------------------------------------------------------------------------------
+mkdir /cert
+----------------------------------------------------------------------------------------------------------------------------
+cd /cert | ls
+----------------------------------------------------------------------------------------------------------------------------
+cp /etc/ssl/openssl.cnf /cert/ | ls
+----------------------------------------------------------------------------------------------------------------------------
+nano openssl.cnf [dir cert]
+----------------------------------------------------------------------------------------------------------------------------
+search :
+default_md = default ---> default_md = sha256
+policy     = policy_match ---> policy = policy_anything
+
+# For the CA policy
+[ policy_match ]
+countryName            = match ---> optional
+stateOrProvinceName    = match ---> optional
+organizationName       = match ---> optional
+organizationalUnitName = optional
+commonName             = supplied
+emailAddress           = optional
+
+##################################################
+[ req ]
+default_bits           = 2048 ---> 4096
+default_keyfile        = privkey.pem
+distinguished_name     = req_distinguished_name
+req_extensions         = v3_req
+attributes             = req_attributes
+x509_extensions = v3_ca # The Extensions to add to the self signed cert
+
+[ req_distinguished_name ]
+countryName                                     = Country Name (2 letter code)
+countryName_default                             = AU ---> ID
+countryName_min                                 = 2
+countryName_max                                 = 2
+
+stateOrProvinceName                             = State or Province Name (full name)
+stateOrProvinceName_default                             = Some-State ---> Jawa Barat
+
+localityName                                        = Locality Name (eg, city)
+
+0.organizationName                              = Organization Name (eg, company)
+0.organizationName_default                              = Internet Widgits Pty Ltd ---> SMKN 1 Katapang
+
+[Ke arah paling bawah dari file openssl.cnf]
+
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation,digitalSignature,keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = kelompok1.id
+DNS.2 = *.kelompok1.id
+IP.1 = 192.168.10.2
+
+[save]
+----------------------------------------------------------------------------------------------------------------------------
+/cert# openssl genrsa -out ca.key 4096
+----------------------------------------------------------------------------------------------------------------------------
+/cert# ls | ca.key openssl.cnf
+----------------------------------------------------------------------------------------------------------------------------
+/cert# openssl req -new -x509 -days 365 -sha256 -config openssl.cnf -key ca.key -out ca.crt
+----------------------------------------------------------------------------------------------------------------------------
+Locality Name (eg, city) []:Bandung
+Organizational Unit Name (eg, section) []:TKJ
+Common Name (e.g. server FQDN or YOUR name) []: kelompok 1
+Email Address []:admin@kelompok1.id
+----------------------------------------------------------------------------------------------------------------------------
+/cert# ls | ca.crt ca.key openssl.cnf
+----------------------------------------------------------------------------------------------------------------------------
+/cert# openssl genrsa -out kelompok1.id.key 4096
+----------------------------------------------------------------------------------------------------------------------------
+/cert# openssl req -new -sha256 -config openssl.cnf -key kelompok1.id.key -out kelompok1.id.csr
+----------------------------------------------------------------------------------------------------------------------------
+Locality Name (eg, city) []:Bandung
+Organizational Unit Name (eg, section) []:TKJ
+Common Name (e.g. server FQDN or YOUR name) []: kelompok1.id
+Email Address []:admin@kelompok1.id
+
+A challenge password []: [enter]
+An optional company name []: [enter]
+----------------------------------------------------------------------------------------------------------------------------
+/cert# ls | ca.crt ca.key kelompok1.id.csr kelompok1.id.key openssl.cnf
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/cert# openssl x509 -req -days 365 -sha256 -in kelompok1.id.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out kelompok1.id.crt -extensions v3_req -extfile openssl.cnf
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/cert# openssl pkcs12 -export -sha256 -in kelompok1.id.crt -inkey kelompok1.id.key -out kelompok1.id.p12
+----------------------------------------------------------------------------------------------------------------------------
+/cert# openssl pkcs12 -export -in kelompok1.id.crt -inkey kelompok1.id.key -out kelompok1.id.p12
+----------------------------------------------------------------------------------------------------------------------------
+Enter Export Password : TKJ2017
+----------------------------------------------------------------------------------------------------------------------------
+/cert# ls | ca.crt ca.key kelompok1.id.crt kelompok1.id.csr kelompok1.id.key kelompok1.id.p12 openssl.cnf
+----------------------------------------------------------------------------------------------------------------------------
+nano /etc/apache2/sites-available/default
+----------------------------------------------------------------------------------------------------------------------------
+ServerName www.kelompok1.id
+Redirect / https://www,kelompok1.id
+
+----------------------------------------------------------------------------------------------------------------------------
+/etc/apache2/sites-available# cp default https
+----------------------------------------------------------------------------------------------------------------------------
+/etc/apache2/sites-available# nano https
+----------------------------------------------------------------------------------------------------------------------------
+
+        ServerAdmin webmaster@kelompok1.id
+        ServerName www.kelompok1.id
+
+        SSLEngine On
+        SSLCertificateFile /cert/kelompok1.id.crt
+        SSLCertificateKeyFile /cert/kelompok1.id.key
+
+----------------------------------------------------------------------------------------------------------------------------
+/etc/apache2/sites-available# a2ensite https
+----------------------------------------------------------------------------------------------------------------------------
+/etc/apache2/sites-available# a2enmod ssl
+----------------------------------------------------------------------------------------------------------------------------
+/etc/apache2# nano ports.conf
+----------------------------------------------------------------------------------------------------------------------------
+NameVirtualHost *:80
+NameVirtualHost *:443
+Listen 80
+
+[save]
+----------------------------------------------------------------------------------------------------------------------------
+service apache2 restart
+----------------------------------------------------------------------------------------------------------------------------
+Buka Google --> Settings --> Manage Certificates
+
+Trusted Root Certification Authorities --> Import ca.crt
+
+Personal --> Import kelompok1.id.p12 --> TKJ2017
+----------------------------------------------------------------------------------------------------------------------------
+https://www.kelompok1.id
+----------------------------------------------------------------------------------------------------------------------------
+
+**********************************************************************
+**********************************************************************
+Syntax Konfigurasi FTPS
+**********************************************************************
+**********************************************************************
+
+----------------------------------------------------------------------------------------------------------------------------
+apt-get install proftpd-basic -y
+----------------------------------------------------------------------------------------------------------------------------
+OK - Standalone
+----------------------------------------------------------------------------------------------------------------------------
+nano /etc/proftpd/proftpd.conf
+----------------------------------------------------------------------------------------------------------------------------
+Search :
+ServerName  [Debian] ---> [ftp.kelompok1.id]
+Hilangkan tanda [#] pada DefaultRoot
+Port 21 menjadi 990
+Hilangkan tanda [#] pada Include /etc/proftpd/tls.conf
+
+[save]
+----------------------------------------------------------------------------------------------------------------------------
+nano /etc/proftpd/tls.conf
+----------------------------------------------------------------------------------------------------------------------------
+Hilangkan tanda [#] pada TLSEngine on
+Hilangkan tanda [#] pada TLSLog /var/log/proftpd/tls.log
+Hilangkan tanda [#] pada TLSProtocol SSLv23
+Hilangkan tanda [#] pada TLSRSACertificateFile /etc/ssl/certs/proftpd.crt
+Hilangkan tanda [#] pada TLSRSACertificateKeyFile /etc/ssl/private/proftpd.key
+Ganti TLSRSACertificateFile /etc/ssl/certs/proftpd.crt        ---> TLSRSACertificateFile /cert/kelompok1.id.crt
+Ganti TLSRSACertificateKeyFile /etc/ssl/private/proftpd.key   ---> TLSRSACertificateKeyFile /cert/kelompok1.id.key
+Hilangkan tanda [#] pada TLSCACertificateFile /etc/ssl/certs/CA.pem
+Ganti TLSCACertificateFile /etc/ssl/certs/CA.pem ---> TLSCACertificateFile /cert/ca.crt
+
+Ada :
+#TLSOptions NoCertRequest EnableDiags
+#TLSOptions NoCertRequest EnableDiags NoSessionReuseRequired
+
+Tambahkan di bawah nya :
+TLSOptions NoCertRequest UseImplicitSSL NoSessionReuseRequired [tanpa #]
+
+Hilangkan tanda [#] pada TLSVerifyClient off
+Hilangkan tanda [#] pada TLSRequired on
+
+[save]
+----------------------------------------------------------------------------------------------------------------------------
+nano /etc/proftpd/modules.conf
+----------------------------------------------------------------------------------------------------------------------------
+ke bagian paling bawah
+
+Beri tanda [#] di depan tulisan LoadModule mod_tls_memcache.c
+----------------------------------------------------------------------------------------------------------------------------
+service proftpd restart
+----------------------------------------------------------------------------------------------------------------------------
+adduser kelompok1
+----------------------------------------------------------------------------------------------------------------------------
+Buka FileZilla --> Navigation bar [File] --> Site Manager
+
+Masukkan User [kelompok1], Password, dan Port nya
+
+Host ftp.kelompok1.id
+Protocol ( FTP - File Transfer Protocol )
+Encryption Require implicit FTP over TLS
+Logon Type Normal
+
+Connect
+
+Abort previous connection and connect in current tab [OK]
+
+Certificate in chain [0]
+
+beri tanda ceklis pada checkbox [Always trust certificate in future sessions]
+
+[OK]
